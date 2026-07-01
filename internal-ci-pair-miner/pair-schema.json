@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MinedFailPassPair",
+  "type": "object",
+  "required": ["repo", "failed_job", "passed_job", "ci_service"],
+  "properties": {
+    "repo": { "type": "string", "description": "group/project slug" },
+    "ci_service": { "type": "string", "description": "gitlab-ci | jenkins | ..." },
+    "branch": { "type": "string" },
+    "pr_id": { "type": ["integer", "null"] },
+    "is_filtered_out": { "type": "boolean", "default": false },
+    "filtered_reason": { "type": ["string", "null"] },
+    "failed_job": { "$ref": "#/definitions/job" },
+    "passed_job": { "$ref": "#/definitions/job" },
+    "classification": {
+      "type": "object",
+      "properties": {
+        "build": { "enum": ["Yes", "No", "Partial"] },
+        "test": { "enum": ["Yes", "No", "Partial"] },
+        "code": { "enum": ["Yes", "No", "Partial"] },
+        "exceptions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "reproduced": { "type": "boolean" },
+    "stability": { "type": "string", "description": "e.g. 5/5 after reproduce phase" }
+  },
+  "definitions": {
+    "job": {
+      "type": "object",
+      "required": ["job_id", "run_id", "status", "commit_sha", "started_at"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "job_name": { "type": "string" },
+        "status": { "enum": ["passed", "failed", "error", "canceled"] },
+        "commit_sha": { "type": "string" },
+        "branch": { "type": "string" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "config_hash": { "type": "string", "description": "runner + matrix fingerprint" },
+        "log_url": { "type": "string" }
+      }
+    }
+  }
+}

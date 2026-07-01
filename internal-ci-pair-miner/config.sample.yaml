@@ -1,0 +1,38 @@
+# Copy to pair-miner/config/codehub.yaml and fill in values.
+# Add codehub.yaml to .gitignore if it contains secrets.
+
+codehub:
+  type: gitlab          # gitlab | gitea | bitbucket | jenkins | custom
+  base_url: https://codehub.internal
+  api_url: https://codehub.internal/api/v4
+  clone_url_template: "https://codehub.internal/{group}/{project}.git"
+  # Auth via env recommended:
+  # export CODEHUB_TOKEN=...
+  token_env: CODEHUB_TOKEN
+
+ci:
+  system: gitlab-ci     # gitlab-ci | jenkins | gitea-actions | custom
+  # API paths relative to api_url (adjust per platform)
+  list_pipelines: "/projects/{project_id}/pipelines"
+  list_jobs: "/projects/{project_id}/pipelines/{pipeline_id}/jobs"
+  job_log: "/projects/{project_id}/jobs/{job_id}/trace"
+  # Map platform status strings to normalized: passed | failed | error | canceled
+  status_map:
+    success: passed
+    failed: failed
+    canceled: canceled
+
+mining:
+  max_age_days: 400     # BugSwarm default cutoff for GitHub Actions
+  per_page: 100
+  rate_limit_sleep_sec: 1
+
+reproducibility:
+  allowed_runners:
+    - ubuntu
+    - ubuntu-22.04
+    - docker
+  log_retention_days: 30
+
+output:
+  dir: pair-miner/output
