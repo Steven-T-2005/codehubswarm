@@ -1,17 +1,72 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "MinedFailPassPair",
+  "title": "StabilityRepairCase",
+  "description": "JSON export of one mined fail→pass repair case for stability-focused knowledge base",
   "type": "object",
-  "required": ["repo", "failed_job", "passed_job", "ci_service"],
+  "required": [
+    "case_id",
+    "repo",
+    "failed_job",
+    "passed_job",
+    "ci_service",
+    "failed_commit_sha",
+    "passed_commit_sha",
+    "primary_focus",
+    "stability_category",
+    "problem_description"
+  ],
   "properties": {
+    "case_id": {
+      "type": "string",
+      "description": "Stable hash of repo + failed_job_id + passed_job_id"
+    },
     "repo": { "type": "string", "description": "group/project slug" },
-    "ci_service": { "type": "string", "description": "gitlab-ci | jenkins | ..." },
     "branch": { "type": "string" },
     "pr_id": { "type": ["integer", "null"] },
-    "is_filtered_out": { "type": "boolean", "default": false },
-    "filtered_reason": { "type": ["string", "null"] },
+    "ci_service": { "type": "string", "description": "gitlab-ci | jenkins | gitea-actions | custom" },
+    "primary_focus": {
+      "enum": ["stability", "general", "unknown"],
+      "description": "P0 stability vs P1 general defect"
+    },
+    "stability_category": {
+      "$ref": "#/definitions/stability_category"
+    },
+    "stability_category_secondary": {
+      "$ref": "#/definitions/stability_category"
+    },
+    "stability_relevance_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Pre-classification relevance score; P0 if >= threshold"
+    },
+    "problem_description": {
+      "type": "string",
+      "description": "Structured text: [Summary], [Errors], [Context], [Commits]"
+    },
+    "failed_commit_sha": {
+      "type": "string",
+      "description": "Before fix (failed job commit)"
+    },
+    "passed_commit_sha": {
+      "type": "string",
+      "description": "After fix (passed job commit)"
+    },
+    "unified_diff": {
+      "type": "string",
+      "description": "git diff failed_sha..passed_sha"
+    },
     "failed_job": { "$ref": "#/definitions/job" },
     "passed_job": { "$ref": "#/definitions/job" },
+    "code_changes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/code_change" },
+      "description": "Per-file before/after code and diff"
+    },
+    "failure_signals": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/failure_signal" }
+    },
     "classification": {
       "type": "object",
       "properties": {
@@ -21,10 +76,33 @@
         "exceptions": { "type": "array", "items": { "type": "string" } }
       }
     },
+    "is_filtered_out": { "type": "boolean", "default": false },
+    "filtered_reason": { "type": ["string", "null"] },
+    "mined_at": { "type": "string", "format": "date-time" },
     "reproduced": { "type": "boolean" },
-    "stability": { "type": "string", "description": "e.g. 5/5 after reproduce phase" }
+    "stability_rerun_score": {
+      "type": "string",
+      "description": "Optional reproduce phase: e.g. 5/5 reruns passed"
+    }
   },
   "definitions": {
+    "stability_category": {
+      "type": "string",
+      "enum": [
+        "concurrency_race",
+        "timeout_retry",
+        "resource_leak",
+        "null_safety",
+        "exception_handling",
+        "network_resilience",
+        "flaky_test",
+        "state_consistency",
+        "capacity_load",
+        "configuration",
+        "other_stability",
+        "non_stability"
+      ]
+    },
     "job": {
       "type": "object",
       "required": ["job_id", "run_id", "status", "commit_sha", "started_at"],
@@ -38,6 +116,36 @@
         "started_at": { "type": "string", "format": "date-time" },
         "config_hash": { "type": "string", "description": "runner + matrix fingerprint" },
         "log_url": { "type": "string" }
+      }
+    },
+    "code_change": {
+      "type": "object",
+      "required": ["file_path"],
+      "properties": {
+        "file_path": { "type": "string" },
+        "language": { "type": "string" },
+        "is_test_file": { "type": "boolean" },
+        "code_before": {
+          "type": ["string", "null"],
+          "description": "Full file content at failed_commit_sha; null if added file"
+        },
+        "code_after": {
+          "type": ["string", "null"],
+          "description": "Full file content at passed_commit_sha; null if deleted file"
+        },
+        "file_diff": { "type": "string", "description": "Unified diff hunks for this file only" },
+        "truncated": { "type": "boolean", "default": false }
+      }
+    },
+    "failure_signal": {
+      "type": "object",
+      "required": ["signal_type", "content", "source"],
+      "properties": {
+        "signal_type": {
+          "enum": ["stack_trace", "error_line", "assert", "timeout", "keyword"]
+        },
+        "content": { "type": "string" },
+        "source": { "enum": ["ci_log", "commit", "mr"] }
       }
     }
   }
