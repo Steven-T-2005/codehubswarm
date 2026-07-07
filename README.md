@@ -1,1 +1,1 @@
-我希望你参考C:\Users\t50060543\codehubswarm-main，在https://open.codehub.huawei.com/OpenSourceCenter_CR/openharmony/filemanagement_app_file_service/-/change_requests上抓取数据，token为Codehub 919GzhhvQVScjxxQN4S4xDpx，然后我希望你能按错误类别分类(如appfrozen,memoryleak，appcrash等类别），最后你可以稍微放宽要求，把所有代码变更pair都整理出来，要求：变更前代码，变更后代码，diff，以及错误类型（可以直接读取标题）d。
+
