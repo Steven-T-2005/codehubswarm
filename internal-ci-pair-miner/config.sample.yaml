@@ -1,193 +1,69 @@
 # =============================================================================
-# CodeHub Stability Repair Miner — 配置模板
+# CodeHub Stability Fix Miner — 配置模板
+# Skill 根目录内使用；路径均相对于 skill 文件夹。
 # =============================================================================
 #
-# 使用步骤：
-#   1. 复制本文件为 pair-miner/config/codehub.yaml
-#   2. 填写内网 CodeHub 地址、认证、目标仓库信息
-#   3. export CODEHUB_TOKEN=...  （不要把 token 写进 yaml 或提交 git）
-#   4. 运行 ./run_mine.sh -r group/project
+# 快速开始：
+#   cd internal-ci-pair-miner
+#   export CODEHUB_TOKEN=...
+#   ./run_fetch_crs.sh
 #
-# 产出：
-#   - pair-miner/data/stability_repair.db  （修复知识库，供下游 Agent 查询）
-#   - pair-miner/output/pairs/<repo>.json   （可选 JSON 导出）
-#
-# 优先级（与 SKILL.md 一致）：
-#   P0 stability  — 稳定性相关 fail→pass，完整 enrichment + 分类
-#   P1 general    — 其他缺陷修复，同样入库但 priority 较低
-#   P2 filtered   — 不可复现/低价值，仍写入 DB 并标记 filtered_reason
-#
-# 每条 P0/P1 案例必须包含：
-#   code_before, code_after, unified_diff, problem_description, stability_category
+# 产出（skill 目录内）：
+#   data/dfr_repair.db
+#   output/codehub/<project>-stability-fixes.json
 # =============================================================================
 
 codehub:
-  type: gitlab          # gitlab | gitea | bitbucket | jenkins | custom
-  base_url: https://codehub.corp.internal
-  api_url: https://codehub.corp.internal/api/v4
-  clone_url_template: "https://codehub.corp.internal/{group}/{project}.git"
-  # 仓库标识方式（二选一，按平台 API 要求填写）：
-  repo_slug_format: "{group}/{project}"   # 人类可读，CLI -r 参数用这个
-  # project_id: 12345                     # 部分 API 需要数字 ID，与 slug 二选一或同时维护映射
-  token_env: CODEHUB_TOKEN                # 从环境变量读 token，不要明文写 token
-  ssl_verify: true                        # 内网自签证书时可设为 false（仅测试环境）
-  api_timeout_sec: 30
-
-ci:
-  system: gitlab-ci     # gitlab-ci | jenkins | gitea-actions | custom
-  # API 路径（相对 api_url；占位符按平台调整）
-  list_pipelines: "/projects/{project_id}/pipelines"
-  list_jobs: "/projects/{project_id}/pipelines/{pipeline_id}/jobs"
-  job_log: "/projects/{project_id}/jobs/{job_id}/trace"
-  merge_request: "/projects/{project_id}/merge_requests/{mr_iid}"
-  # 平台原始状态 → 归一化：passed | failed | error | canceled
-  status_map:
-    success: passed
-    failed: failed
-    error: error           # Jenkins UNSTABLE 等映射到 error
-    canceled: canceled
-    skipped: canceled      # 按需：跳过视为 canceled
-  # config_hash 组成字段（用于对齐 fail/pass 的同一 job 配置）
-  config_hash_fields:
-    - job_name
-    - runner
-    - tag_list
-    - matrix
+  type: gitlab
+  base_url: https://open.codehub.huawei.com
+  api_url: https://open.codehub.huawei.com/api/v4
+  project: OpenSourceCenter_CR/openharmony/filemanagement_app_file_service
+  token_env: CODEHUB_TOKEN
 
 mining:
-  max_age_days: 400
-  per_page: 100
-  rate_limit_sleep_sec: 1
-  max_retries: 3
-  resume_from_last_run: true    # 中断后从上次 run_id 继续
-  # 优先级控制
-  primary_focus: stability      # stability = 优先稳定性；all = 不区分优先级
-  include_general: true         # true：仍收录 P1 一般缺陷；false：只入库 stability
-  stability_score_threshold: 0.5  # score >= 此值为 P0 stability 队列
-  default_repos: []             # 可选：["group/project"]，空则靠 CLI -r / -f
-
-# Phase 4 过滤规则（filtered 案例仍写入 DB，is_filtered_out=true）
-filters:
-  store_filtered_in_db: true    # 必须为 true：审计用，不可静默丢弃
-  reject_no_sha: true
-  reject_same_commit: true
-  reject_unavailable_commit: true
-  reject_expired_logs: true
-  reject_unsupported_runner: true
-  reject_secrets_in_config: true
-  reject_unsupported_ci_syntax: true
-  reject_no_code_change: true   # failed..passed 之间 diff 为空
-  deprioritize_docs_only: true  # 仅改 *.md/docs 时标记 docs_only，默认仍入库
-  docs_only_globs:
-    - "**/*.md"
-    - "docs/**"
-    - "**/README*"
-
-stability:
-  # 用于 stability_relevance_score（0–1）；按你们技术栈扩展
-  log_keywords:
-    - timeout
-    - deadline exceeded
-    - deadlock
-    - race
-    - data race
-    - OOM
-    - out of memory
-    - panic
-    - flaky
-    - retry
-    - connection reset
-    - connection refused
-    - nil pointer
-    - null pointer
-    - NullPointerException
-    - ConcurrentModification
-    - goroutine leak
-    - resource leak
-    - interrupted
-    - context canceled
-    - broken pipe
-    - too many open files
-  path_hints:
-    - concurrent
-    - lock
-    - mutex
-    - retry
-    - circuit
-    - pool
-    - cache
-    - timeout
-    - backoff
-    - connection
-    - http.client
-    - semaphore
-    - rate.limit
-  test_path_patterns:
-    - "*test*"
-    - "*spec*"
-    - "*_test.go"
-    - "*_test.py"
-    - "tests/"
-  # 分类 taxonomy（写入 stability_category；Agent 分类时从此列表选 primary）
-  categories:
-    - concurrency_race      # race, deadlock, lock ordering
-    - timeout_retry         # timeout, missing retry/backoff
-    - resource_leak         # fd/memory/goroutine leak
-    - null_safety           # NPE, nil deref
-    - exception_handling    # wrong catch, swallowed error
-    - network_resilience    # connection drop, DNS, partial failure
-    - flaky_test            # timing, sleep, order dependence
-    - state_consistency     # stale cache, wrong shared state
-    - capacity_load         # OOM, throttling, queue overflow
-    - configuration         # wrong timeout/limit/pool size
-    - other_stability       # 稳定性相关但未归类
-    - non_stability         # 纯 build/功能修复（P1 general 常用）
-
-enrichment:
-  # Git 拉取与 diff（Phase 5 必填）
-  local_repo_dir: pair-miner/cache/repos   # git clone --mirror 或 bare 缓存目录
-  git_fetch_depth: 0                       # 0 = 完整历史；浅克隆可设 500
-  max_file_lines: 2000                     # 超出则截断 code_before/code_after，truncated=true
-  log_excerpt_lines: 80                    # 失败 job 日志中错误上下文行数
-  include_commit_messages: true            # git log failed..passed → problem_description
-  include_mr_description: true           # CodeHub MR/PR 标题与描述
-  # problem_description 结构（Agent 生成时遵循此格式）：
-  #   [Summary]  一行失败摘要
-  #   [Errors]   堆栈 / 错误行 / assert
-  #   [Context]  branch, job, failed_sha, passed_sha
-  #   [Commits]  failed..passed 之间的 commit message
+  mr_state: merged
+  stability_classes:
+    - appfreeze
+    - jserror
+    - jsleak
+    - memoryleak
+  min_confidence: 0.2
 
 classification:
-  # BugSwarm 风格辅助轴（写入 classification JSON）
-  enable_build_test_code_axes: true
-  # primary_focus 判定：score >= mining.stability_score_threshold 或 category != non_stability
+  keywords:
+    appfreeze:
+      - appfreeze
+      - freeze
+      - anr
+      - thread_block
+      - ui_block
+      - 卡死
+      - 冻屏
+      - 无响应
+    jserror:
+      - jserror
+      - typeerror
+      - referenceerror
+      - is not callable
+      - jscrash
+    jsleak:
+      - jsleak
+      - heapsnapshot
+      - heapdump
+      - retainer
+      - gc root
+    memoryleak:
+      - memoryleak
+      - memory leak
+      - oom
+      - 内存泄漏
+
+enrichment:
+  max_file_lines: 2000
+  fetch_file_content: true
 
 database:
-  engine: sqlite                 # sqlite | postgresql | mongodb
-  path: pair-miner/data/stability_repair.db
-  # engine: postgresql
-  # url: postgresql://user:pass@localhost:5432/stability_repair
-  # engine: mongodb
-  # url: mongodb://localhost:27017/stability_repair
-  enable_fts: true               # SQLite FTS5，便于 repair agent 按关键词搜 problem_description
-  # 表：repair_cases, code_changes, failure_signals（见 reference.md / db_schema.sql）
-
-query:
-  # 下游修复 Agent 默认查询行为（run_query.sh 读取）
-  default_focus: stability       # stability | general | all
-  default_min_score: 0.5
-  default_limit: 20
-  default_format: json           # json | table
-
-reproducibility:
-  allowed_runners:
-    - ubuntu
-    - ubuntu-22.04
-    - docker
-  log_retention_days: 30         # 超过此天数的 job log 可能 404 → filtered_reason: expired_logs
+  path: data/dfr_repair.db
 
 output:
-  dir: pair-miner/output
-  export_json: true              # output/pairs/<group>-<project>.json，schema 见 pair-schema.json
-  keep_raw_api: true             # output/raw/<repo>/ 原始 API 响应，便于调试 adapter
-  keep_job_logs: true            # output/logs/ 失败 job 完整日志
+  dir: output/codehub
